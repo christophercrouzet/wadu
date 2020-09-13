@@ -809,9 +809,6 @@ class _Property(object):
                                                           self.values)
 
 
-_MONTHS_EXPAND = 1 << 0
-
-
 _Bounds = namedtuple(
     'Bounds', (
         'lo',
@@ -827,7 +824,6 @@ _DateContext = namedtuple(
         'is_leap',                # int
         'iso_offset',             # int
         'sow_offset',             # int
-        'on_months_behaviour',    # int
         'on_week_days_woy_freq',  # int
         'bounds',                 # _Bounds
     ))
@@ -848,7 +844,6 @@ def _handle_months_prop(values,  # type: Sequence[int]
     freq = context.freq
     start = context.start
     is_leap = context.is_leap
-    behaviour = context.on_months_behaviour
     bounds = context.bounds
 
     assert all(JANUARY <= x <= DECEMBER for x in months)
@@ -871,16 +866,11 @@ def _handle_months_prop(values,  # type: Sequence[int]
     hi_month = min(hi_info[0] * 12 + hi_info[1], 12)
 
     # Retrieve the values for this property.
-    if behaviour & _MONTHS_EXPAND:
-        it = (doy_count[x - 1] + y
-              for x in months
-              for y in _range(
-                  lo_info[2] - 1 if x == lo_month else 0,
-                  hi_info[2] - 1 if (x - 1) == hi_month else dom_count[x - 1]))
-    else:
-        it = (doy_count[x - 1] + start[2] - 1
-              for x in months
-              if start[2] <= dom_count[x - 1])
+    it = (doy_count[x - 1] + y
+          for x in months
+          for y in _range(
+              lo_info[2] - 1 if x == lo_month else 0,
+              hi_info[2] - 1 if (x - 1) == hi_month else dom_count[x - 1]))
 
     return tuple(x for x in it if x in values)
 
@@ -1214,7 +1204,6 @@ def _get_dt_set(
         freq,                   # type: int
         start,                  # type: Tuple[int, int, int, int, int, int]
         sow_offset,             # type: int
-        on_months_behaviour,    # type: int
         on_week_days_woy_freq,  # type: int
         props                   # type: Sequence[_Property]
         ):
@@ -1248,7 +1237,6 @@ def _get_dt_set(
                                is_leap,
                                iso_offset,
                                sow_offset,
-                               on_months_behaviour,
                                on_week_days_woy_freq,
                                bounds)
         doys = prop.handler(doys, prop.values, context)
@@ -1334,11 +1322,6 @@ class RecurrenceRule(object):
         # Retrieve the start of the week relatively to Monday.
         sow_offset = self._week_start - MONDAY
 
-        # The ‘on months’ property, if any, outputs a single day for each given
-        # month when it is the one and only property of the recurrence rule.
-        # Otherwise, it outputs the days for the whole given months.
-        on_months_behaviour = _MONTHS_EXPAND if len(self._dt_props) > 1 else 0
-
         on_week_days_woy_freq = (
             MONTHLY if (self._freq == YEARLY
                         and any(x.kind == _PROP_ON_MONTHS
@@ -1370,7 +1353,6 @@ class RecurrenceRule(object):
                                 self._freq,
                                 start,
                                 sow_offset,
-                                on_months_behaviour,
                                 on_week_days_woy_freq,
                                 dt_props)
             tm_set = get_tm_set(
